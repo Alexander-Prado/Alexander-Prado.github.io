@@ -1,0 +1,20 @@
+{
+  "short_name": "Entrega",
+  "name": "Registro de Entrega de Equipos",
+  "icons": [
+    {
+      "src": "iapp.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "taexapp.png",
+      "sizes": "512x512",
+      "type": "image/jpg"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1976d2",
+  "background_color": "#ffffff"
+}
