@@ -1,0 +1,345 @@
+import { useState, useRef, useEffect } from "react";
+import jsPDF from "jspdf";
+import "./App.css";
+
+export default function FormularioEntrega() {
+  const [data, setData] = useState({
+    equipo: "",
+    numero: "",
+    estado: "",
+    cargador: "",
+    costoReposicion: "",
+    otro: "",
+    marca: "",
+    modelo: "",
+    serie: "",
+    bateria: "",
+    color: "",
+    nombres: "",
+    apellidos: "",
+    jefe: "",
+    dni: "",
+    area: "",
+    sede: "",
+    cargo: "",
+    fecha: "",
+  });
+
+  const [firmaAdminListo, setFirmaAdminListo] = useState(false);
+  const [firmaUsuarioListo, setFirmaUsuarioListo] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+
+  const firmaAdmin = useRef(null);
+  const firmaUsuario = useRef(null);
+
+  const [historial, setHistorial] = useState([]);
+
+  useEffect(() => {
+    const storedHist = JSON.parse(localStorage.getItem("historialEntregas") || "[]");
+    setHistorial(storedHist);
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("dark", darkMode);
+  }, [darkMode]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setData({ ...data, [name]: value });
+  };
+
+  const dibujarFirma = (canvas, e) => {
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    if ((e.buttons && e.buttons === 1) || e.touches) {
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  };
+
+  const limpiarFirmas = () => {
+    [firmaAdmin, firmaUsuario].forEach((ref) => {
+      if (!ref.current) return;
+      const ctx = ref.current.getContext("2d");
+      ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+      ctx.beginPath();
+      ctx.drawing = false;
+    });
+    setFirmaAdminListo(false);
+    setFirmaUsuarioListo(false);
+  };
+
+  const guardarFirmaAdmin = () => {
+    setFirmaAdminListo(true);
+    alert("Firma de Administración guardada correctamente.");
+  };
+
+  const guardarFirmaUsuario = () => {
+    if (!firmaAdminListo) {
+      alert("Primero debe firmar la Administración.");
+      return;
+    }
+    setFirmaUsuarioListo(true);
+    alert("Firma del Usuario guardada correctamente.");
+  };
+
+  const generarPDF = () => {
+    if (!firmaAdminListo || !firmaUsuarioListo) {
+      alert("Faltan firmas. Deben estar ambas para generar el PDF.");
+      return;
+    }
+
+    const doc = new jsPDF("p", "mm", "a4");
+
+    // --- LOGO ---
+    try {
+      const logo = new Image();
+      logo.src = "/logo.jpg";
+      doc.addImage(logo, "JPG", 15, 10, 40, 15);
+    } catch {}
+
+    // --- TÍTULO ---
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("CARGO DE ENTREGA DE EQUIPOS", 105, 25, { align: "center" });
+
+    // --- FECHA ---
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    if (data.fecha) {
+      const [yyyy, mm, dd] = data.fecha.split("-");
+      doc.text(`Fecha: ${dd}/${mm}/${yyyy}`, 190, 30, { align: "right" });
+    }
+
+    // --- GENERAR NÚMERO DE DOCUMENTO ÚNICO ---
+    const stored = JSON.parse(localStorage.getItem("entregaCounter") || '{"year":0,"count":0}');
+    const nowYear = new Date().getFullYear();
+    let counter = stored;
+    if (stored.year !== nowYear) {
+      counter = { year: nowYear, count: 0 };
+    }
+    const next = counter.count + 1;
+    const numeroDoc = `ENT-${counter.year}-${String(next).padStart(3, "0")}`;
+    localStorage.setItem("entregaCounter", JSON.stringify({ year: counter.year, count: next }));
+
+    doc.text(`N° Documento: ${numeroDoc}`, 190, 36, { align: "right" });
+
+    // --- INTRODUCCIÓN ---
+    doc.setFontSize(11);
+    const intro = `Se hace entrega de un(a) ${data.equipo || "________"} con las siguientes características, en calidad de préstamo para realizar sus funciones asignadas por la empresa. Cualquier uso no autorizado como llamadas nacionales o internacionales, será bajo su entera responsabilidad y se cargara el total del gasto generado. El equipo deberá ser devuelto inmediatamente y en un estado óptimo tal cual como fue entregado al mínimo requerimiento de la Gerencia o persona asignada por ellos para ese fin.`;
+    doc.text(doc.splitTextToSize(intro, 170), 20, 42);
+
+    const fila = (label, value, x, y) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(`${label.toUpperCase()}:`, x, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(value || "________", x + 45, y);
+    };
+
+    // --- DETALLE DEL EQUIPO ---
+    let y = 95;
+    const camposEquipo = [
+      ["Número", data.numero, 20, y],
+      ["Marca", data.marca, 20, y + 8],
+      ["Modelo", data.modelo, 20, y + 16],
+      ["Serie", data.serie, 20, y + 24],
+      ["Color", data.color, 110, y],
+      ["Batería", data.bateria, 110, y + 8],
+      ["Costo Reposición", data.costoReposicion, 110, y + 16],
+      ["Otro", data.otro, 110, y + 24],
+      ["Estado", data.estado, 20, y + 40],
+      ["Cargador", data.cargador, 110, y + 40],
+    ];
+    camposEquipo.forEach(([label, value, x, yPos]) => fila(label, value, x, yPos));
+
+    // --- TEXTO ADICIONAL ---
+    const texto2 = `Mediante la firma de este documento, el usuario acepta que el equipo se entrega en buenas condiciones. Si se malogra o pierde, se solicitará la reposición y los gastos que ocasione serán responsabilidad del usuario. En caso deje de laborar tendrá un plazo de 48 horas como máximo para entregar el equipo asignado, de lo contrario se realizara un descuento directo en su proximo cobro.`;
+    doc.text(doc.splitTextToSize(texto2, 170), 20, y + 55);
+
+    // --- DATOS DEL USUARIO ---
+    let yDatos = y + 100;
+    const camposUsuario = [
+      ["Nombres", data.nombres, 20, yDatos],
+      ["Apellidos", data.apellidos, 20, yDatos + 8],
+      ["DNI", data.dni, 20, yDatos + 16],
+      ["Área", data.area, 110, yDatos],
+      ["Cargo", data.cargo, 110, yDatos + 8],
+      ["Sede", data.sede, 110, yDatos + 16],
+      ["Jefe/Gerente", data.jefe, 110, yDatos + 24],
+    ];
+    camposUsuario.forEach(([label, value, x, yPos]) => fila(label, value, x, yPos));
+
+    // --- FIRMAS ---
+    const firmaAdminImg = firmaAdmin.current.toDataURL("image/png");
+    const firmaUsuarioImg = firmaUsuario.current.toDataURL("image/png");
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const blockWidth = 70;
+    const gap = 30;
+    const totalWidth = blockWidth * 2 + gap;
+    const startX = (pageWidth - totalWidth) / 2;
+    const adminX = startX;
+    const userX = startX + blockWidth + gap;
+    const yFirmas = 265;
+
+    // Firma Administración
+    try { if (firmaAdminImg) doc.addImage(firmaAdminImg, "PNG", adminX + 5, yFirmas - 25, 60, 20); } catch {}
+    doc.setLineWidth(0.5);
+    doc.line(adminX + 5, yFirmas, adminX + 65, yFirmas);
+    doc.setFont("helvetica", "normal");
+    doc.text("Administración", adminX + 35, yFirmas + 7, { align: "center" });
+
+    // Firma Usuario
+    try { if (firmaUsuarioImg) doc.addImage(firmaUsuarioImg, "PNG", userX + 5, yFirmas - 25, 60, 20); } catch {}
+    doc.line(userX + 5, yFirmas, userX + 65, yFirmas);
+    doc.text("Recibí Conforme", userX + 35, yFirmas + 7, { align: "center" });
+
+    doc.save(`${numeroDoc}_${data.nombres || "usuario"}.pdf`);
+
+    // --- GUARDAR EN HISTORIAL ---
+    const nuevoRegistro = {
+      numeroDoc,
+      fecha: data.fecha,
+      nombres: data.nombres,
+      equipo: data.equipo,
+      pdfDataUri: doc.output("datauristring"),
+    };
+    const historialActualizado = [...historial, nuevoRegistro];
+    setHistorial(historialActualizado);
+    localStorage.setItem("historialEntregas", JSON.stringify(historialActualizado));
+  };
+
+  const eliminarRegistro = (numeroDoc) => {
+    const nuevoHistorial = historial.filter((item) => item.numeroDoc !== numeroDoc);
+    setHistorial(nuevoHistorial);
+    localStorage.setItem("historialEntregas", JSON.stringify(nuevoHistorial));
+  };
+
+  const historialFiltrado = historial.filter(
+    (item) =>
+      item.nombres?.toLowerCase().includes(busqueda.toLowerCase()) ||
+      item.equipo?.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
+  return (
+    <div className="form-container">
+      <h2>Registro de Entrega de Equipos</h2>
+
+      <button onClick={() => setDarkMode(!darkMode)}>
+        {darkMode ? "Modo Claro ☀️" : "Modo Oscuro 🌙"}
+      </button>
+
+      <div className="form-grid">
+        {Object.keys(data).map((key) => {
+          if (key === "estado" || key === "cargador" || key === "fecha") return null;
+          return (
+            <input
+              key={key}
+              name={key}
+              placeholder={key.charAt(0).toUpperCase() + key.slice(1)}
+              value={data[key]}
+              onChange={handleChange}
+            />
+          );
+        })}
+        <select name="estado" onChange={handleChange} value={data.estado}>
+          <option value="">Seleccione estado</option>
+          <option value="Nuevo">Nuevo</option>
+          <option value="Usado">Usado</option>
+        </select>
+        <select name="cargador" onChange={handleChange} value={data.cargador}>
+          <option value="">¿Cargador?</option>
+          <option value="Sí">Sí</option>
+          <option value="No">No</option>
+        </select>
+        <input type="date" name="fecha" onChange={handleChange} value={data.fecha} />
+      </div>
+
+      <div className="firma-section">
+        <div>
+          <h3>Firma Administración</h3>
+          <canvas
+            ref={firmaAdmin}
+            width={200}
+            height={100}
+            className="sigCanvas"
+            onMouseMove={(e) => dibujarFirma(firmaAdmin.current, e)}
+            onTouchMove={(e) => dibujarFirma(firmaAdmin.current, e)}
+            onTouchStart={(e) => { e.preventDefault(); dibujarFirma(firmaAdmin.current, e); }}
+          />
+          <button onClick={guardarFirmaAdmin}>Guardar Firma Administración</button>
+        </div>
+        <div>
+          <h3>Firma Usuario</h3>
+          <canvas
+            ref={firmaUsuario}
+            width={200}
+            height={100}
+            className="sigCanvas"
+            onMouseMove={(e) => dibujarFirma(firmaUsuario.current, e)}
+            onTouchMove={(e) => dibujarFirma(firmaUsuario.current, e)}
+            onTouchStart={(e) => { e.preventDefault(); dibujarFirma(firmaUsuario.current, e); }}
+          />
+          <button onClick={guardarFirmaUsuario}>Guardar Firma Usuario</button>
+        </div>
+      </div>
+
+      <div className="botones">
+        <button onClick={generarPDF}>Generar PDF</button>
+        <button onClick={limpiarFirmas}>Limpiar Firmas</button>
+      </div>
+
+      {historial.length > 0 && (
+        <div className="historial">
+          <h3>Historial de Entregas</h3>
+          <input
+            type="text"
+            placeholder="Buscar por usuario o equipo..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          <table>
+            <thead>
+              <tr>
+                <th>N° Documento</th>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Equipo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historialFiltrado.map((item, idx) => (
+                <tr key={idx}>
+                  <td>{item.numeroDoc}</td>
+                  <td>{item.fecha || "-"}</td>
+                  <td>{item.nombres || "-"}</td>
+                  <td>{item.equipo || "-"}</td>
+                  <td>
+                    <a href={item.pdfDataUri} download={`${item.numeroDoc}.pdf`}>
+                      Descargar
+                    </a>
+                    <button onClick={() => eliminarRegistro(item.numeroDoc)}>Eliminar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+
